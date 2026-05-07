@@ -1,13 +1,14 @@
 const express = require("express");
 const { z } = require("zod");
 const { clerkClient } = require("@clerk/express");
-const { supabase } = require("../db/supabase");
+const { Project, ProjectMember, Task } = require("../models");
 const {
   ensureUserFromClerkUser,
   requireAuth,
   requireProjectRole,
 } = require("../middleware/auth");
 const { asyncHandler } = require("../utils/async-handler");
+const { isValidObjectId } = require("../utils/ids");
 
 const router = express.Router();
 
@@ -35,25 +36,41 @@ const updateMemberSchema = z.object({
   role: z.enum(["admin", "member"]),
 });
 
+const formatMember = (member) => {
+  const user = member.user_id;
+  const userPayload = user && typeof user.toJSON === "function" ? user.toJSON() : user;
+
+  return {
+    id: member.id,
+    role: member.role,
+    joined_at: member.joined_at,
+    user: userPayload || null,
+  };
+};
+
 router.get(
   "/",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const { data, error } = await supabase
-      .from("project_members")
-      .select("role, project:projects (id, name, description, created_at, updated_at)")
-      .eq("user_id", req.user.id);
+    const memberships = await ProjectMember.find({ user_id: req.user.id })
+      .populate("project_id", "name description created_at updated_at")
+      .sort({ joined_at: 1 });
 
-    if (error) {
-      throw error;
-    }
-
-    const projects = (data || [])
-      .map((item) => ({
-        ...item.project,
-        role: item.role,
-      }))
-      .filter((project) => Boolean(project?.id));
+    const projects = memberships
+      .map((membership) => {
+        if (!membership.project_id) {
+          return null;
+        }
+        const project =
+          typeof membership.project_id.toJSON === "function"
+            ? membership.project_id.toJSON()
+            : membership.project_id;
+        return {
+          ...project,
+          role: membership.role,
+        };
+      })
+      .filter(Boolean);
 
     res.json({ data: projects });
   })
@@ -64,34 +81,21 @@ router.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const payload = createProjectSchema.parse(req.body);
-    const now = new Date().toISOString();
 
-    const { data: project, error } = await supabase
-      .from("projects")
-      .insert({
-        name: payload.name,
-        description: payload.description ?? null,
-        created_by: req.user.id,
-        updated_at: now,
-      })
-      .select("*")
-      .single();
+    const project = await Project.create({
+      name: payload.name,
+      description: payload.description ?? null,
+      created_by: req.user.id,
+      updated_at: new Date(),
+    });
 
-    if (error) {
-      throw error;
-    }
-
-    const { error: memberError } = await supabase.from("project_members").insert({
+    await ProjectMember.create({
       project_id: project.id,
       user_id: req.user.id,
       role: "admin",
     });
 
-    if (memberError) {
-      throw memberError;
-    }
-
-    res.status(201).json({ data: { ...project, role: "admin" } });
+    res.status(201).json({ data: { ...project.toJSON(), role: "admin" } });
   })
 );
 
@@ -102,27 +106,21 @@ router.get(
   asyncHandler(async (req, res) => {
     const { projectId } = req.params;
 
-    const { data: project, error: projectError } = await supabase
-      .from("projects")
-      .select("*")
-      .eq("id", projectId)
-      .single();
-
-    if (projectError) {
-      throw projectError;
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" });
     }
 
-    const { data: members, error: memberError } = await supabase
-      .from("project_members")
-      .select("id, role, joined_at, user:users (id, name, email, avatar_url, clerk_id)")
-      .eq("project_id", projectId)
-      .order("joined_at", { ascending: true });
+    const members = await ProjectMember.find({ project_id: projectId })
+      .populate("user_id", "name email avatar_url clerk_id")
+      .sort({ joined_at: 1 });
 
-    if (memberError) {
-      throw memberError;
-    }
-
-    res.json({ data: { project, members } });
+    res.json({
+      data: {
+        project: project.toJSON(),
+        members: members.map(formatMember),
+      },
+    });
   })
 );
 
@@ -134,18 +132,24 @@ router.patch(
     const payload = updateProjectSchema.parse(req.body);
     const { projectId } = req.params;
 
-    const { data: project, error } = await supabase
-      .from("projects")
-      .update({
-        ...payload,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", projectId)
-      .select("*")
-      .single();
+    const updatePayload = {
+      updated_at: new Date(),
+    };
 
-    if (error) {
-      throw error;
+    if (payload.name !== undefined) {
+      updatePayload.name = payload.name;
+    }
+
+    if (payload.description !== undefined) {
+      updatePayload.description = payload.description ?? null;
+    }
+
+    const project = await Project.findByIdAndUpdate(projectId, updatePayload, {
+      new: true,
+    });
+
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" });
     }
 
     res.json({ data: project });
@@ -159,11 +163,15 @@ router.delete(
   asyncHandler(async (req, res) => {
     const { projectId } = req.params;
 
-    const { error } = await supabase.from("projects").delete().eq("id", projectId);
-
-    if (error) {
-      throw error;
+    if (!isValidObjectId(projectId)) {
+      return res.status(400).json({ error: "Invalid project id" });
     }
+
+    await Project.findByIdAndDelete(projectId);
+    await Promise.all([
+      ProjectMember.deleteMany({ project_id: projectId }),
+      Task.deleteMany({ project_id: projectId }),
+    ]);
 
     res.status(204).send();
   })
@@ -176,17 +184,11 @@ router.get(
   asyncHandler(async (req, res) => {
     const { projectId } = req.params;
 
-    const { data: members, error } = await supabase
-      .from("project_members")
-      .select("id, role, joined_at, user:users (id, name, email, avatar_url, clerk_id)")
-      .eq("project_id", projectId)
-      .order("joined_at", { ascending: true });
+    const members = await ProjectMember.find({ project_id: projectId })
+      .populate("user_id", "name email avatar_url clerk_id")
+      .sort({ joined_at: 1 });
 
-    if (error) {
-      throw error;
-    }
-
-    res.json({ data: members });
+    res.json({ data: members.map(formatMember) });
   })
 );
 
@@ -215,36 +217,24 @@ router.post(
 
     const user = await ensureUserFromClerkUser(clerkUser);
 
-    const { data: existing, error: existingError } = await supabase
-      .from("project_members")
-      .select("id")
-      .eq("project_id", projectId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (existingError) {
-      throw existingError;
-    }
+    const existing = await ProjectMember.findOne({
+      project_id: projectId,
+      user_id: user.id,
+    });
 
     if (existing) {
       return res.status(409).json({ error: "User is already a member" });
     }
 
-    const { data: member, error } = await supabase
-      .from("project_members")
-      .insert({
-        project_id: projectId,
-        user_id: user.id,
-        role: payload.role || "member",
-      })
-      .select("id, role, joined_at, user:users (id, name, email, avatar_url, clerk_id)")
-      .single();
+    const member = await ProjectMember.create({
+      project_id: projectId,
+      user_id: user.id,
+      role: payload.role || "member",
+    });
 
-    if (error) {
-      throw error;
-    }
+    await member.populate("user_id", "name email avatar_url clerk_id");
 
-    res.status(201).json({ data: member });
+    res.status(201).json({ data: formatMember(member) });
   })
 );
 
@@ -253,21 +243,24 @@ router.patch(
   requireAuth,
   requireProjectRole(["admin"]),
   asyncHandler(async (req, res) => {
-    const { memberId } = req.params;
+    const { projectId, memberId } = req.params;
     const payload = updateMemberSchema.parse(req.body);
 
-    const { data: member, error } = await supabase
-      .from("project_members")
-      .update({ role: payload.role })
-      .eq("id", memberId)
-      .select("id, role, joined_at, user:users (id, name, email, avatar_url, clerk_id)")
-      .single();
-
-    if (error) {
-      throw error;
+    if (!isValidObjectId(memberId)) {
+      return res.status(400).json({ error: "Invalid member id" });
     }
 
-    res.json({ data: member });
+    const member = await ProjectMember.findOneAndUpdate(
+      { _id: memberId, project_id: projectId },
+      { role: payload.role },
+      { new: true }
+    ).populate("user_id", "name email avatar_url clerk_id");
+
+    if (!member) {
+      return res.status(404).json({ error: "Member not found" });
+    }
+
+    res.json({ data: formatMember(member) });
   })
 );
 
@@ -276,16 +269,13 @@ router.delete(
   requireAuth,
   requireProjectRole(["admin"]),
   asyncHandler(async (req, res) => {
-    const { memberId } = req.params;
+    const { projectId, memberId } = req.params;
 
-    const { error } = await supabase
-      .from("project_members")
-      .delete()
-      .eq("id", memberId);
-
-    if (error) {
-      throw error;
+    if (!isValidObjectId(memberId)) {
+      return res.status(400).json({ error: "Invalid member id" });
     }
+
+    await ProjectMember.findOneAndDelete({ _id: memberId, project_id: projectId });
 
     res.status(204).send();
   })

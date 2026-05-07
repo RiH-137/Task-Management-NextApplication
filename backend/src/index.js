@@ -8,14 +8,26 @@ const envCandidates = [
   path.resolve(__dirname, "..", envFile),
   path.resolve(process.cwd(), ".env"),
   path.resolve(__dirname, "..", ".env"),
+  path.resolve(process.cwd(), "frontend", envFile),
+  path.resolve(__dirname, "..", "..", "frontend", envFile),
+  path.resolve(process.cwd(), "frontend", ".env"),
+  path.resolve(__dirname, "..", "..", "frontend", ".env"),
 ];
 
-const resolvedEnvPath = envCandidates.find((candidate) => fs.existsSync(candidate));
+const loadedEnvPaths = new Set();
+envCandidates.forEach((candidate) => {
+  if (fs.existsSync(candidate) && !loadedEnvPaths.has(candidate)) {
+    dotenv.config({ path: candidate, override: false });
+    loadedEnvPaths.add(candidate);
+  }
+});
 
-if (resolvedEnvPath) {
-  dotenv.config({ path: resolvedEnvPath });
-} else {
+if (loadedEnvPaths.size === 0) {
   dotenv.config();
+}
+
+if (!process.env.CLERK_PUBLISHABLE_KEY && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
+  process.env.CLERK_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 }
 
 const express = require("express");
@@ -23,6 +35,7 @@ const cors = require("cors");
 const morgan = require("morgan");
 const { clerkMiddleware } = require("@clerk/express");
 const { apiRouter } = require("./routes");
+const { connectToDatabase } = require("./db/mongo");
 
 const app = express();
 
@@ -59,6 +72,17 @@ app.use((err, req, res, next) => {
 });
 
 const port = process.env.PORT || 4000;
-app.listen(port, () => {
-  console.log(`API listening on ${port}`);
-});
+
+const startServer = async () => {
+  try {
+    await connectToDatabase();
+    app.listen(port, () => {
+      console.log(`API listening on ${port}`);
+    });
+  } catch (error) {
+    console.error("Failed to start server", error);
+    process.exit(1);
+  }
+};
+
+startServer();

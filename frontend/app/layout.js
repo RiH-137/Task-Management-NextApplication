@@ -1,11 +1,10 @@
 import {
   ClerkProvider,
   Show,
-  SignInButton,
-  SignUpButton,
   UserButton,
 } from "@clerk/nextjs";
 import { Instrument_Serif, Space_Grotesk } from "next/font/google";
+import Link from "next/link";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -27,9 +26,10 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${spaceGrotesk.variable} ${instrumentSerif.variable} antialiased`}
+        suppressHydrationWarning
       >
         <ClerkProvider>
           <header className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -44,22 +44,18 @@ export default function RootLayout({ children }) {
             </div>
             <nav className="flex items-center gap-2">
               <Show when="signed-out">
-                <SignInButton
-                  mode="modal"
-                  children={
-                    <button className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 transition hover:border-zinc-500 hover:text-zinc-900">
-                      Sign in
-                    </button>
-                  }
-                />
-                <SignUpButton
-                  mode="modal"
-                  children={
-                    <button className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-50 shadow-sm transition hover:bg-zinc-800">
-                      Create account
-                    </button>
-                  }
-                />
+                <Link
+                  href="/sign-in"
+                  className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 transition hover:border-zinc-500 hover:text-zinc-900"
+                >
+                  Sign in
+                </Link>
+                <Link
+                  href="/sign-up"
+                  className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-50 shadow-sm transition hover:bg-zinc-800"
+                >
+                  Create account
+                </Link>
               </Show>
               <Show when="signed-in">
                 <UserButton afterSignOutUrl="/" />

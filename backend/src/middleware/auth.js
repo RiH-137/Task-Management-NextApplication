@@ -1,5 +1,6 @@
 const { clerkClient } = require("@clerk/express");
-const { supabase } = require("../db/supabase");
+const { User, ProjectMember } = require("../models");
+const { isValidObjectId } = require("../utils/ids");
 
 const buildUserPayload = (clerkUser) => {
   const email = clerkUser.primaryEmailAddress?.emailAddress || null;
@@ -16,44 +17,19 @@ const buildUserPayload = (clerkUser) => {
 };
 
 const ensureUserFromClerkUser = async (clerkUser) => {
-  const { data: existing, error: fetchError } = await supabase
-    .from("users")
-    .select("*")
-    .eq("clerk_id", clerkUser.id)
-    .maybeSingle();
-
-  if (fetchError) {
-    throw fetchError;
-  }
+  const existing = await User.findOne({ clerk_id: clerkUser.id });
 
   if (existing) {
     return existing;
   }
 
   const payload = buildUserPayload(clerkUser);
-  const { data: created, error: insertError } = await supabase
-    .from("users")
-    .insert(payload)
-    .select("*")
-    .single();
-
-  if (insertError) {
-    throw insertError;
-  }
-
+  const created = await User.create(payload);
   return created;
 };
 
 const ensureUserByClerkId = async (clerkUserId) => {
-  const { data: existing, error: fetchError } = await supabase
-    .from("users")
-    .select("*")
-    .eq("clerk_id", clerkUserId)
-    .maybeSingle();
-
-  if (fetchError) {
-    throw fetchError;
-  }
+  const existing = await User.findOne({ clerk_id: clerkUserId });
 
   if (existing) {
     return existing;
@@ -78,18 +54,16 @@ const requireAuth = async (req, res, next) => {
 };
 
 const getProjectMembership = async (projectId, userId) => {
-  const { data, error } = await supabase
-    .from("project_members")
-    .select("id, role, project_id, user_id")
-    .eq("project_id", projectId)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) {
-    throw error;
+  if (!isValidObjectId(projectId) || !isValidObjectId(userId)) {
+    return null;
   }
 
-  return data || null;
+  const membership = await ProjectMember.findOne({
+    project_id: projectId,
+    user_id: userId,
+  });
+
+  return membership || null;
 };
 
 const requireProjectRole = (allowedRoles = ["admin", "member"]) => async (req, res, next) => {
@@ -97,6 +71,10 @@ const requireProjectRole = (allowedRoles = ["admin", "member"]) => async (req, r
 
   if (!projectId) {
     return res.status(400).json({ error: "Project id required" });
+  }
+
+  if (!isValidObjectId(projectId)) {
+    return res.status(400).json({ error: "Invalid project id" });
   }
 
   try {

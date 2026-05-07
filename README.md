@@ -7,7 +7,7 @@ Full-stack task management app with projects, assignments, and role-based access
 - Frontend: Next.js + Tailwind CSS
 - Backend: Node.js + Express
 - Auth: Clerk (email + Google)
-- Database: Supabase (Postgres)
+- Database: MongoDB
 
 ## Features
 
@@ -23,15 +23,14 @@ Full-stack task management app with projects, assignments, and role-based access
 
 ```bash
 cd backend
-cp .env.example .env.local
 ```
 
-Fill in the environment variables from Supabase and Clerk.
+Create `backend/.env.local` and set:
 
-Run the database schema:
-
-- Open Supabase SQL editor
-- Execute [backend/db/schema.sql](backend/db/schema.sql)
+- `MONGODB_URI` (or `MongoDB_URI`)
+- `CLERK_SECRET_KEY`
+- `CLERK_PUBLISHABLE_KEY` (optional if `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is set)
+- `CORS_ORIGIN`
 
 Start the API:
 
@@ -60,7 +59,7 @@ npm run dev
 
 1. Create two Railway services: `backend` and `frontend`.
 2. Backend service:
-	- Set environment variables from [backend/.env.example](backend/.env.example).
+	- Set environment variables from your `backend/.env.local`.
 	- Deploy from the `backend` folder.
 3. Frontend service:
 	- Set environment variables from [frontend/.env.example](frontend/.env.example).

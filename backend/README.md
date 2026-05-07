@@ -1,11 +1,15 @@
 # Backend API
 
-Express + Supabase API for the Team Task Manager.
+Express + MongoDB API for the Team Task Manager.
 
 ## Setup
 
-1. Create a Supabase project and run [db/schema.sql](db/schema.sql) in the SQL editor.
-2. Configure environment variables (see [.env.example](.env.example)).
+1. Create a MongoDB database (Atlas or local) and copy the connection string.
+2. Configure environment variables in `backend/.env.local`:
+	- `MONGODB_URI` (or `MongoDB_URI`)
+	- `CLERK_SECRET_KEY`
+	- `CLERK_PUBLISHABLE_KEY` (optional if `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is set)
+	- `CORS_ORIGIN`
 3. Install dependencies and start the server:
 
 ```bash
