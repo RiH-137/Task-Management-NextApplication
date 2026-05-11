@@ -4,8 +4,8 @@ Full-stack task management app with projects, assignments, and role-based access
 
 ## Live link
 
-- Frontend URL: [<Live Link>](https://ttmng.netlify.app/)
-- Backend URL: [<Backend>](https://task-management-nextapplication.onrender.com)
+- Frontend URL: https://ttmng.netlify.app/
+- Backend URL: https://task-management-nextapplication.onrender.com
 
 ## About
 
@@ -209,6 +209,6 @@ Authorization: Bearer <token>
 
 ## Submission
 
-- Frontend URL: [<Live Link>](https://ttmng.netlify.app/)
-- Backend URL: [<Backend>](https://task-management-nextapplication.onrender.com)
-- GitHub repo: [<Github>](https://github.com/RiH-137/Task-Management-NextApplication)
+- Frontend URL: https://ttmng.netlify.app/
+- Backend URL: https://task-management-nextapplication.onrender.com
+- GitHub repo: https://github.com/RiH-137/Task-Management-NextApplication
