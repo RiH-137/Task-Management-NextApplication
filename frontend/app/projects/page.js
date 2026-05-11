@@ -9,7 +9,7 @@ export default function ProjectsPage() {
 
   if (!ready) {
     return (
-      <main className="pb-16">
+      <main className="pb-18">
         <div className="mx-auto max-w-6xl px-4 py-16 text-sm text-zinc-500">
           Loading your workspace...
         </div>
@@ -18,7 +18,7 @@ export default function ProjectsPage() {
   }
 
   return (
-    <main className="pb-16">
+    <main className="pb-18">
       {token ? <DashboardClient /> : <Hero />}
     </main>
   );
