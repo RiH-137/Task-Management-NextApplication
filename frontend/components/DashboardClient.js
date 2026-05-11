@@ -69,6 +69,7 @@ export default function DashboardClient({ initialProjectId = "" }) {
   });
   const [commentInputs, setCommentInputs] = useState({});
   const [statusFilter, setStatusFilter] = useState("all");
+  const [showNewTaskModal, setShowNewTaskModal] = useState(false);
 
   const apiFetch = useCallback(
     async (path, options = {}) => {
@@ -420,6 +421,7 @@ export default function DashboardClient({ initialProjectId = "" }) {
       });
       setNotice("Task added.");
       loadDashboard(activeProjectId);
+      setShowNewTaskModal(false);
     } catch (error) {
       setNotice(error.message);
     }
@@ -637,6 +639,41 @@ export default function DashboardClient({ initialProjectId = "" }) {
       <div className="mt-10 grid gap-6 lg:grid-cols-[1fr_2fr]">
         <div className="space-y-6">
           <div className="rounded-3xl border border-zinc-200 bg-white/90 p-6 shadow-sm">
+            <h3 className="font-display text-xl text-zinc-900">New project</h3>
+            <form className="mt-4 space-y-3" onSubmit={handleCreateProject}>
+              <input
+                type="text"
+                placeholder="Project name"
+                value={projectForm.name}
+                onChange={(event) =>
+                  setProjectForm((prev) => ({
+                    ...prev,
+                    name: event.target.value,
+                  }))
+                }
+                className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none"
+              />
+              <textarea
+                rows={3}
+                placeholder="Short description"
+                value={projectForm.description}
+                onChange={(event) =>
+                  setProjectForm((prev) => ({
+                    ...prev,
+                    description: event.target.value,
+                  }))
+                }
+                className="w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none"
+              />
+              <button
+                type="submit"
+                className="w-full rounded-2xl bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-50 shadow-sm transition hover:bg-zinc-800"
+              >
+                Create project
+              </button>
+            </form>
+          </div>
+          <div className="rounded-3xl border border-zinc-200 bg-white/90 p-6 shadow-sm">
             <div className="flex items-center justify-between">
               <h2 className="font-display text-2xl text-zinc-900">Projects</h2>
               <span className="text-xs uppercase tracking-[0.2em] text-zinc-500">
@@ -776,11 +813,7 @@ export default function DashboardClient({ initialProjectId = "" }) {
                 </span>
                 <button
                   type="button"
-                  onClick={() =>
-                    document
-                      .getElementById("new-task")
-                      ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                  }
+                  onClick={() => setShowNewTaskModal(true)}
                   className="flex h-9 w-9 items-center justify-center rounded-full border border-zinc-300 bg-white text-lg font-semibold text-zinc-900 transition hover:border-zinc-500"
                   aria-label="Create new task"
                   title="Create new task"
@@ -1151,161 +1184,141 @@ export default function DashboardClient({ initialProjectId = "" }) {
         </div>
       </div>
 
-      <div className="mt-10 grid gap-6 lg:grid-cols-[1fr_2fr]">
-        <div className="rounded-3xl border border-zinc-200 bg-white/90 p-6 shadow-sm">
-          <h3 className="font-display text-xl text-zinc-900">New project</h3>
-          <form className="mt-4 space-y-3" onSubmit={handleCreateProject}>
-            <input
-              type="text"
-              placeholder="Project name"
-              value={projectForm.name}
-              onChange={(event) =>
-                setProjectForm((prev) => ({
-                  ...prev,
-                  name: event.target.value,
-                }))
-              }
-              className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none"
-            />
-            <textarea
-              rows={3}
-              placeholder="Short description"
-              value={projectForm.description}
-              onChange={(event) =>
-                setProjectForm((prev) => ({
-                  ...prev,
-                  description: event.target.value,
-                }))
-              }
-              className="w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none"
-            />
-            <button
-              type="submit"
-              className="w-full rounded-2xl bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-50 shadow-sm transition hover:bg-zinc-800"
-            >
-              Create project
-            </button>
-          </form>
-        </div>
-
-        <div
-          id="new-task"
-          className="rounded-3xl border border-zinc-200 bg-white/90 p-6 shadow-sm"
-        >
-          <h3 className="font-display text-xl text-zinc-900">New task</h3>
-          <form className="mt-4 space-y-3" onSubmit={handleCreateTask}>
-            <input
-              type="text"
-              placeholder="Task title"
-              value={taskForm.title}
-              onChange={(event) =>
-                setTaskForm((prev) => ({
-                  ...prev,
-                  title: event.target.value,
-                }))
-              }
-              disabled={!isAdmin}
-              className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none"
-            />
-            <textarea
-              rows={3}
-              placeholder="Task details"
-              value={taskForm.description}
-              onChange={(event) =>
-                setTaskForm((prev) => ({
-                  ...prev,
-                  description: event.target.value,
-                }))
-              }
-              disabled={!isAdmin}
-              className="w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none"
-            />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                  End date
-                </p>
-                <input
-                  type="date"
-                  value={taskForm.dueDate}
+      {showNewTaskModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
+          <button
+            type="button"
+            className="absolute inset-0 bg-zinc-950/60"
+            onClick={() => setShowNewTaskModal(false)}
+            aria-label="Close new task popup"
+          />
+          <div className="relative w-full max-w-2xl rounded-3xl border border-zinc-200 bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display text-xl text-zinc-900">New task</h3>
+              <button
+                type="button"
+                onClick={() => setShowNewTaskModal(false)}
+                className="rounded-full border border-zinc-300 px-3 py-1 text-xs uppercase tracking-[0.2em] text-zinc-600 transition hover:border-zinc-500"
+              >
+                Close
+              </button>
+            </div>
+            <form className="mt-4 space-y-3" onSubmit={handleCreateTask}>
+              <input
+                type="text"
+                placeholder="Task title"
+                value={taskForm.title}
+                onChange={(event) =>
+                  setTaskForm((prev) => ({
+                    ...prev,
+                    title: event.target.value,
+                  }))
+                }
+                disabled={!isAdmin}
+                className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none"
+              />
+              <textarea
+                rows={3}
+                placeholder="Task details"
+                value={taskForm.description}
+                onChange={(event) =>
+                  setTaskForm((prev) => ({
+                    ...prev,
+                    description: event.target.value,
+                  }))
+                }
+                disabled={!isAdmin}
+                className="w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none"
+              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                    End date
+                  </p>
+                  <input
+                    type="date"
+                    value={taskForm.dueDate}
+                    onChange={(event) =>
+                      setTaskForm((prev) => ({
+                        ...prev,
+                        dueDate: event.target.value,
+                      }))
+                    }
+                    disabled={!isAdmin}
+                    className="mt-2 w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
+                  />
+                </div>
+                <select
+                  value={taskForm.priority}
                   onChange={(event) =>
                     setTaskForm((prev) => ({
                       ...prev,
-                      dueDate: event.target.value,
+                      priority: event.target.value,
                     }))
                   }
                   disabled={!isAdmin}
-                  className="mt-2 w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
-                />
+                  className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
+                >
+                  {PRIORITY_OPTIONS.map((priority) => (
+                    <option key={priority} value={priority}>
+                      {priority}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <select
-                value={taskForm.priority}
-                onChange={(event) =>
-                  setTaskForm((prev) => ({
-                    ...prev,
-                    priority: event.target.value,
-                  }))
-                }
+              <div className="grid gap-3 sm:grid-cols-2">
+                <select
+                  value={taskForm.status}
+                  onChange={(event) =>
+                    setTaskForm((prev) => ({
+                      ...prev,
+                      status: event.target.value,
+                    }))
+                  }
+                  disabled={!isAdmin}
+                  className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
+                >
+                  {STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status.replace("_", " ")}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={taskForm.assignedTo}
+                  onChange={(event) =>
+                    setTaskForm((prev) => ({
+                      ...prev,
+                      assignedTo: event.target.value,
+                    }))
+                  }
+                  disabled={!isAdmin}
+                  className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
+                >
+                  <option value="">Unassigned</option>
+                  {assignableMembers.map((member) => (
+                    <option key={member.id} value={member.user?.id || ""}>
+                      {member.user?.name || member.user?.email || "Member"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="submit"
                 disabled={!isAdmin}
-                className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
+                className="w-full rounded-2xl bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-50 shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
               >
-                {PRIORITY_OPTIONS.map((priority) => (
-                  <option key={priority} value={priority}>
-                    {priority}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <select
-                value={taskForm.status}
-                onChange={(event) =>
-                  setTaskForm((prev) => ({
-                    ...prev,
-                    status: event.target.value,
-                  }))
-                }
-                disabled={!isAdmin}
-                className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
-              >
-                {STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>
-                    {status.replace("_", " ")}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={taskForm.assignedTo}
-                onChange={(event) =>
-                  setTaskForm((prev) => ({
-                    ...prev,
-                    assignedTo: event.target.value,
-                  }))
-                }
-                disabled={!isAdmin}
-                className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
-              >
-                <option value="">Unassigned</option>
-                {assignableMembers.map((member) => (
-                  <option key={member.id} value={member.user?.id || ""}>
-                    {member.user?.name || member.user?.email || "Member"}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button
-              type="submit"
-              disabled={!isAdmin}
-              className="w-full rounded-2xl bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-50 shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
-            >
-              Add task
-            </button>
-            {!isAdmin && (
-              <p className="text-xs text-zinc-500">Only admins can create tasks.</p>
-            )}
-          </form>
+                Add task
+              </button>
+              {!isAdmin && (
+                <p className="text-xs text-zinc-500">
+                  Only admins can create tasks.
+                </p>
+              )}
+            </form>
+          </div>
         </div>
-      </div>
+      )}
     </section>
   );
 }
