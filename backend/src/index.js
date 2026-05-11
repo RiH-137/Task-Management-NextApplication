@@ -34,16 +34,36 @@ const { connectToDatabase } = require("./db/mongo");
 
 const app = express();
 
+const normalizeOrigin = (origin) => {
+  if (!origin) return "";
+  return origin.trim().replace(/\/+$/, "").toLowerCase();
+};
+
 const corsOrigins = (process.env.CORS_ORIGIN || "")
   .split(",")
-  .map((origin) => origin.trim())
+  .map(normalizeOrigin)
   .filter(Boolean);
+
+const isOriginAllowed = (origin) => {
+  if (!origin) return true;
+  if (corsOrigins.length === 0) return true;
+  if (corsOrigins.includes("*")) return true;
+  const normalized = normalizeOrigin(origin);
+  return corsOrigins.includes(normalized);
+};
 
 app.use(
   cors({
-    origin: corsOrigins.length > 0 ? corsOrigins : "*",
+    origin: (origin, callback) => {
+      if (isOriginAllowed(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error("Not allowed by CORS"));
+    },
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    optionsSuccessStatus: 204,
   })
 );
 
