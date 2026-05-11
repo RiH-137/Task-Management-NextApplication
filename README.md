@@ -4,8 +4,8 @@ Full-stack task management app with projects, assignments, and role-based access
 
 ## Live link
 
-- Frontend: <add-your-live-url>
-- Backend: <add-your-backend-url>
+- Frontend URL: [<Live Link>](https://ttmng.netlify.app/)
+- Backend URL: [<Backend>](https://task-management-nextapplication.onrender.com)
 
 ## About
 
@@ -98,31 +98,117 @@ npm run dev
 
 ## API overview
 
-- `GET /health`
+Base URL (local): `http://localhost:4000`
+
+Auth
+- `POST /api/auth/register`
+	- Body:
+		```json
+		{
+			"name": "Rishi Ranjan",
+			"email": "101rishidsr@gmail.com",
+			"password": "ok@123456"
+		}
+		```
+- `POST /api/auth/login`
+	- Body:
+		```json
+		{
+			"email": "101rishidsr@gmail.com",
+			"password": "ok@123456"
+		}
+		```
+
+Users
+- `GET /api/users/me`
+
+Projects
 - `GET /api/projects`
 - `POST /api/projects`
+	- Body:
+		```json
+		{
+			"name": "Website Redesign",
+			"description": "Refresh the marketing site"
+		}
+		```
 - `GET /api/projects/:projectId`
 - `PATCH /api/projects/:projectId`
+	- Body (any fields):
+		```json
+		{
+			"name": "Website Redesign",
+			"description": "Updated scope"
+		}
+		```
 - `DELETE /api/projects/:projectId`
+
+Project members
 - `GET /api/projects/:projectId/members`
 - `POST /api/projects/:projectId/members`
+	- Body:
+		```json
+		{
+			"email": "100bytehacker@gmail.com",
+			"role": "member"
+		}
+		```
 - `PATCH /api/projects/:projectId/members/:memberId`
+	- Body:
+		```json
+		{
+			"role": "admin"
+		}
+		```
 - `DELETE /api/projects/:projectId/members/:memberId`
+
+Tasks
 - `GET /api/projects/:projectId/tasks`
 - `POST /api/projects/:projectId/tasks`
+	- Body:
+		```json
+		{
+			"title": "Create wireframes",
+			"description": "Homepage + pricing",
+			"status": "todo",
+			"priority": "medium",
+			"dueDate": "2026-06-15",
+			"assignedTo": "64f2cfe1a3b24d7d1b9b4e11"
+		}
+		```
 - `PATCH /api/tasks/:taskId`
-- `DELETE /api/tasks/:taskId`
+	- Body (any fields):
+		```json
+		{
+			"status": "in_progress"
+		}
+		```
 - `POST /api/tasks/:taskId/comments`
+	- Body:
+		```json
+		{
+			"message": "Draft is ready for review."
+		}
+		```
+- `DELETE /api/tasks/:taskId`
+
+Dashboard
 - `GET /api/dashboard`
-- `GET /api/dashboard?projectId=:projectId`
-- `GET /api/users/me`
-- `POST /api/auth/register`
-- `POST /api/auth/login`
+	- Optional query: `?projectId=<projectId>`
+
+Health
+- `GET /health`
 
 All `/api/*` routes except `/api/auth/*` require a JWT bearer token.
 
+Header for protected routes:
+
+```
+Authorization: Bearer <token>
+```
+
 ## Submission
 
-- Frontend URL: <add-your-live-url>
-- Backend URL: <add-your-backend-url>
-- GitHub repo: <add-your-repo-url>
+- Frontend URL: [<Live Link>](https://ttmng.netlify.app/)
+- Backend URL: [<Backend>](https://task-management-nextapplication.onrender.com)
+- GitHub repo: [<Github>](https://github.com/RiH-137/Task-Management-NextApplication)
