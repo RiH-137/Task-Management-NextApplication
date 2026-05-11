@@ -47,6 +47,8 @@ export default function DashboardClient() {
     email: "",
     role: "member",
   });
+  const [commentInputs, setCommentInputs] = useState({});
+  const [taskComments, setTaskComments] = useState({});
 
   const apiFetch = useCallback(
     async (path, options = {}) => {
@@ -151,6 +153,8 @@ export default function DashboardClient() {
 
   const isAdmin = activeProject?.role === "admin";
   const currentUserId = currentMember?.user?.id || "";
+  const currentUserName =
+    currentMember?.user?.name || user?.fullName || user?.firstName || "You";
 
   const membersById = useMemo(() => {
     const lookup = new Map();
@@ -255,6 +259,27 @@ export default function DashboardClient() {
     } catch (error) {
       setNotice(error.message);
     }
+  };
+
+  const handleAddComment = (taskId) => {
+    const message = (commentInputs[taskId] || "").trim();
+    if (!message) return;
+
+    setTaskComments((prev) => {
+      const next = { ...prev };
+      const existing = next[taskId] || [];
+      next[taskId] = [
+        ...existing,
+        {
+          id: `${taskId}-${Date.now()}`,
+          author: currentUserName,
+          message,
+          createdAt: new Date().toISOString(),
+        },
+      ];
+      return next;
+    });
+    setCommentInputs((prev) => ({ ...prev, [taskId]: "" }));
   };
 
   const handleInviteMember = async (event) => {
@@ -444,6 +469,8 @@ export default function DashboardClient() {
                   : null;
                 const isOverdue =
                   task.due_date && task.due_date < today && task.status !== "done";
+                const comments = taskComments[task.id] || [];
+                const commentValue = commentInputs[task.id] || "";
 
                 return (
                   <div
@@ -483,6 +510,58 @@ export default function DashboardClient() {
                           Overdue
                         </span>
                       )}
+                    </div>
+                    <div className="mt-4 border-t border-zinc-100 pt-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">
+                        Comments
+                      </p>
+                      <div className="mt-2 space-y-2">
+                        {comments.length === 0 && (
+                          <p className="text-xs text-zinc-500">
+                            No comments yet.
+                          </p>
+                        )}
+                        {comments.map((comment) => (
+                          <div
+                            key={comment.id}
+                            className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-700"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-semibold text-zinc-800">
+                                {comment.author}
+                              </span>
+                              <span className="text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+                                {new Date(comment.createdAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs text-zinc-600">
+                              {comment.message}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                        <textarea
+                          rows={2}
+                          placeholder="Write a comment..."
+                          value={commentValue}
+                          onChange={(event) =>
+                            setCommentInputs((prev) => ({
+                              ...prev,
+                              [task.id]: event.target.value,
+                            }))
+                          }
+                          className="w-full resize-none rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 focus:border-zinc-500 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleAddComment(task.id)}
+                          disabled={!commentValue.trim()}
+                          className="rounded-2xl bg-zinc-900 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-50 shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                        >
+                          Send
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
