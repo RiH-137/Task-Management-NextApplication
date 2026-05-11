@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAuth, useUser } from "@clerk/nextjs";
+import { useAuth } from "./AuthProvider";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const STATUS_OPTIONS = ["todo", "in_progress", "blocked", "done"];
@@ -20,8 +20,7 @@ const emptyStats = {
 };
 
 export default function DashboardClient() {
-  const { getToken } = useAuth();
-  const { user } = useUser();
+  const { token, signOut } = useAuth();
 
   const [stats, setStats] = useState(emptyStats);
   const [projects, setProjects] = useState([]);
@@ -30,6 +29,8 @@ export default function DashboardClient() {
   const [members, setMembers] = useState([]);
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
 
   const [projectForm, setProjectForm] = useState({
     name: "",
@@ -51,15 +52,16 @@ export default function DashboardClient() {
 
   const apiFetch = useCallback(
     async (path, options = {}) => {
-      const token = await getToken();
+      if (!token) {
+        throw new Error("Please sign in to continue.");
+      }
+
       const headers = {
         "Content-Type": "application/json",
         ...(options.headers || {}),
       };
 
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
+      headers.Authorization = `Bearer ${token}`;
 
       const response = await fetch(`${API_BASE}${path}`, {
         ...options,
@@ -70,6 +72,10 @@ export default function DashboardClient() {
         return null;
       }
 
+      if (response.status === 401) {
+        signOut();
+      }
+
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok) {
@@ -78,7 +84,7 @@ export default function DashboardClient() {
 
       return payload.data ?? payload;
     },
-    [getToken]
+    [token, signOut]
   );
 
   const loadDashboard = useCallback(async () => {
@@ -113,6 +119,59 @@ export default function DashboardClient() {
 
   useEffect(() => {
     let isMounted = true;
+
+    if (!token) {
+      setCurrentUser(null);
+      setAuthReady(true);
+      setLoading(false);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    setAuthReady(false);
+    apiFetch("/api/users/me")
+      .then((data) => {
+        if (isMounted) {
+          setCurrentUser(data);
+        }
+      })
+      .catch((error) => {
+        if (isMounted) {
+          setNotice(error.message);
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setAuthReady(true);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [token, apiFetch]);
+
+  useEffect(() => {
+    if (!token) {
+      setStats(emptyStats);
+      setProjects([]);
+      setActiveProjectId("");
+      setTasks([]);
+      setMembers([]);
+      setNotice("");
+    }
+  }, [token]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!token || !authReady || !currentUser) {
+      return () => {
+        isMounted = false;
+      };
+    }
+
     setLoading(true);
 
     Promise.all([loadDashboard(), loadProjects()])
@@ -130,13 +189,17 @@ export default function DashboardClient() {
     return () => {
       isMounted = false;
     };
-  }, [loadDashboard, loadProjects]);
+  }, [token, authReady, currentUser, loadDashboard, loadProjects]);
 
   useEffect(() => {
+    if (!token || !authReady || !currentUser) {
+      return;
+    }
+
     loadProjectDetails(activeProjectId).catch((error) => {
       setNotice(error.message);
     });
-  }, [activeProjectId, loadProjectDetails]);
+  }, [token, authReady, currentUser, activeProjectId, loadProjectDetails]);
 
   const activeProject = useMemo(
     () => projects.find((project) => project.id === activeProjectId) || null,
@@ -144,14 +207,12 @@ export default function DashboardClient() {
   );
 
   const currentMember = useMemo(() => {
-    if (!user?.id) return null;
-    return (
-      members.find((member) => member.user?.clerk_id === user.id) || null
-    );
-  }, [members, user?.id]);
+    if (!currentUser?.id) return null;
+    return members.find((member) => member.user?.id === currentUser.id) || null;
+  }, [members, currentUser?.id]);
 
   const isAdmin = activeProject?.role === "admin";
-  const currentUserId = currentMember?.user?.id || "";
+  const currentUserId = currentMember?.user?.id || currentUser?.id || "";
 
   const membersById = useMemo(() => {
     const lookup = new Map();
@@ -320,7 +381,9 @@ export default function DashboardClient() {
             Workspace
           </p>
           <h1 className="font-display text-3xl text-zinc-900 sm:text-4xl">
-            {user?.firstName ? `Welcome back, ${user.firstName}.` : "Welcome back."}
+            {currentUser?.name
+              ? `Welcome back, ${currentUser.name}.`
+              : "Welcome back."}
           </h1>
           <p className="text-sm text-zinc-600">
             Keep an eye on what is due, what is blocked, and what is next.
@@ -702,7 +765,7 @@ export default function DashboardClient() {
                 Invite member
               </h4>
               <p className="text-xs text-zinc-500">
-                Use the email tied to their Clerk account.
+                Use the email tied to their account.
               </p>
               <form className="mt-3 space-y-3" onSubmit={handleInviteMember}>
                 <input

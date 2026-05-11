@@ -6,12 +6,12 @@ Full-stack task management app with projects, assignments, and role-based access
 
 - Frontend: Next.js + Tailwind CSS
 - Backend: Node.js + Express
-- Auth: Clerk (email + Google)
+- Auth: JWT (email + password)
 - Database: MongoDB
 
 ## Features
 
-- Clerk authentication and session-based API access
+- JWT authentication and session-based API access
 - Project creation and team membership
 - Task creation, assignment, status updates
 - Role-based access (Admin, Member)
@@ -28,8 +28,8 @@ cd backend
 Create `backend/.env.local` and set:
 
 - `MONGODB_URI` (or `MongoDB_URI`)
-- `CLERK_SECRET_KEY`
-- `CLERK_PUBLISHABLE_KEY` (optional if `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is set)
+- `JWT_SECRET`
+- `JWT_EXPIRES_IN` (optional, defaults to 7d)
 - `CORS_ORIGIN`
 
 Start the API:
@@ -65,9 +65,7 @@ npm run dev
 	- Set environment variables from [frontend/.env.example](frontend/.env.example).
 	- Set `NEXT_PUBLIC_API_URL` to the backend Railway URL.
 	- Deploy from the `frontend` folder.
-4. Clerk dashboard:
-	- Add Railway URLs to allowed origins and redirect URLs.
-	- Enable Google and email authentication providers.
+4. Set `JWT_SECRET` on the backend service.
 
 ## API overview
 
@@ -86,8 +84,10 @@ npm run dev
 - `PATCH /api/tasks/:taskId`
 - `DELETE /api/tasks/:taskId`
 - `GET /api/dashboard`
+- `POST /api/auth/register`
+- `POST /api/auth/login`
 
-All `/api/*` routes require a Clerk bearer token.
+All `/api/*` routes except `/api/auth/*` require a JWT bearer token.
 
 ## Submission
 

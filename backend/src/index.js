@@ -26,14 +26,9 @@ if (loadedEnvPaths.size === 0) {
   dotenv.config();
 }
 
-if (!process.env.CLERK_PUBLISHABLE_KEY && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
-  process.env.CLERK_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-}
-
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
-const { clerkMiddleware } = require("@clerk/express");
 const { apiRouter } = require("./routes");
 const { connectToDatabase } = require("./db/mongo");
 
@@ -54,7 +49,6 @@ app.use(
 
 app.use(morgan("dev"));
 app.use(express.json({ limit: "1mb" }));
-app.use(clerkMiddleware());
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok" });

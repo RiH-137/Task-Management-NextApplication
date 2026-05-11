@@ -1,55 +1,67 @@
-const { clerkClient } = require("@clerk/express");
+const jwt = require("jsonwebtoken");
 const { User, ProjectMember } = require("../models");
 const { isValidObjectId } = require("../utils/ids");
 
-const buildUserPayload = (clerkUser) => {
-  const email = clerkUser.primaryEmailAddress?.emailAddress || null;
-  const nameParts = [clerkUser.firstName, clerkUser.lastName].filter(Boolean);
-  const name = nameParts.join(" ").trim();
-  const fallbackName = clerkUser.username || (email ? email.split("@")[0] : "User");
+const getJwtSecret = () => process.env.JWT_SECRET || "dev-secret";
 
-  return {
-    clerk_id: clerkUser.id,
-    email,
-    name: name || fallbackName,
-    avatar_url: clerkUser.imageUrl || null,
+const getJwtSignOptions = () => {
+  const options = {
+    expiresIn: process.env.JWT_EXPIRES_IN || "7d",
   };
-};
 
-const ensureUserFromClerkUser = async (clerkUser) => {
-  const existing = await User.findOne({ clerk_id: clerkUser.id });
-
-  if (existing) {
-    return existing;
+  if (process.env.JWT_ISSUER) {
+    options.issuer = process.env.JWT_ISSUER;
   }
 
-  const payload = buildUserPayload(clerkUser);
-  const created = await User.create(payload);
-  return created;
+  return options;
 };
 
-const ensureUserByClerkId = async (clerkUserId) => {
-  const existing = await User.findOne({ clerk_id: clerkUserId });
+const getJwtVerifyOptions = () => {
+  const options = {};
 
-  if (existing) {
-    return existing;
+  if (process.env.JWT_ISSUER) {
+    options.issuer = process.env.JWT_ISSUER;
   }
 
-  const clerkUser = await clerkClient.users.getUser(clerkUserId);
-  return ensureUserFromClerkUser(clerkUser);
+  return options;
+};
+
+const signUserToken = (user) =>
+  jwt.sign({ sub: user.id }, getJwtSecret(), getJwtSignOptions());
+
+const getTokenFromHeader = (req) => {
+  const header = req.headers.authorization || "";
+  const [scheme, token] = header.split(" ");
+  if (scheme !== "Bearer" || !token) {
+    return null;
+  }
+  return token;
 };
 
 const requireAuth = async (req, res, next) => {
-  if (!req.auth?.userId) {
+  const token = getTokenFromHeader(req);
+
+  if (!token) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
   try {
-    const user = await ensureUserByClerkId(req.auth.userId);
+    const payload = jwt.verify(token, getJwtSecret(), getJwtVerifyOptions());
+    const userId = payload.sub;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
     req.user = user;
     return next();
   } catch (error) {
-    return next(error);
+    return res.status(401).json({ error: "Unauthorized" });
   }
 };
 
@@ -92,9 +104,7 @@ const requireProjectRole = (allowedRoles = ["admin", "member"]) => async (req, r
 };
 
 module.exports = {
-  buildUserPayload,
-  ensureUserByClerkId,
-  ensureUserFromClerkUser,
+  signUserToken,
   getProjectMembership,
   requireAuth,
   requireProjectRole,

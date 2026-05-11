@@ -1,12 +1,7 @@
 const express = require("express");
 const { z } = require("zod");
-const { clerkClient } = require("@clerk/express");
-const { Project, ProjectMember, Task } = require("../models");
-const {
-  ensureUserFromClerkUser,
-  requireAuth,
-  requireProjectRole,
-} = require("../middleware/auth");
+const { Project, ProjectMember, Task, User } = require("../models");
+const { requireAuth, requireProjectRole } = require("../middleware/auth");
 const { asyncHandler } = require("../utils/async-handler");
 const { isValidObjectId } = require("../utils/ids");
 
@@ -24,12 +19,12 @@ const updateProjectSchema = z.object({
 
 const addMemberSchema = z
   .object({
-    clerkUserId: z.string().optional(),
-    email: z.string().email().optional(),
+    email: z
+      .string()
+      .trim()
+      .email()
+      .transform((value) => value.toLowerCase()),
     role: z.enum(["admin", "member"]).optional(),
-  })
-  .refine((values) => values.clerkUserId || values.email, {
-    message: "clerkUserId or email is required",
   });
 
 const updateMemberSchema = z.object({
@@ -112,7 +107,7 @@ router.get(
     }
 
     const members = await ProjectMember.find({ project_id: projectId })
-      .populate("user_id", "name email avatar_url clerk_id")
+      .populate("user_id", "name email avatar_url")
       .sort({ joined_at: 1 });
 
     res.json({
@@ -185,7 +180,7 @@ router.get(
     const { projectId } = req.params;
 
     const members = await ProjectMember.find({ project_id: projectId })
-      .populate("user_id", "name email avatar_url clerk_id")
+      .populate("user_id", "name email avatar_url")
       .sort({ joined_at: 1 });
 
     res.json({ data: members.map(formatMember) });
@@ -199,23 +194,11 @@ router.post(
   asyncHandler(async (req, res) => {
     const { projectId } = req.params;
     const payload = addMemberSchema.parse(req.body);
+    const user = await User.findOne({ email: payload.email });
 
-    let clerkUser = null;
-
-    if (payload.clerkUserId) {
-      clerkUser = await clerkClient.users.getUser(payload.clerkUserId);
-    } else if (payload.email) {
-      const result = await clerkClient.users.getUserList({
-        emailAddress: [payload.email],
-      });
-      clerkUser = result.data[0] || null;
+    if (!user) {
+      return res.status(404).json({ error: "No user found with that email" });
     }
-
-    if (!clerkUser) {
-      return res.status(404).json({ error: "No Clerk user found" });
-    }
-
-    const user = await ensureUserFromClerkUser(clerkUser);
 
     const existing = await ProjectMember.findOne({
       project_id: projectId,
@@ -232,7 +215,7 @@ router.post(
       role: payload.role || "member",
     });
 
-    await member.populate("user_id", "name email avatar_url clerk_id");
+    await member.populate("user_id", "name email avatar_url");
 
     res.status(201).json({ data: formatMember(member) });
   })
@@ -254,7 +237,7 @@ router.patch(
       { _id: memberId, project_id: projectId },
       { role: payload.role },
       { new: true }
-    ).populate("user_id", "name email avatar_url clerk_id");
+    ).populate("user_id", "name email avatar_url");
 
     if (!member) {
       return res.status(404).json({ error: "Member not found" });

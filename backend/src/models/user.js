@@ -2,8 +2,15 @@ const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema(
   {
-    clerk_id: { type: String, required: true, unique: true, index: true },
-    email: { type: String, default: null },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+      lowercase: true,
+      trim: true,
+    },
+    password_hash: { type: String, required: true },
     name: { type: String, required: true },
     avatar_url: { type: String, default: null },
   },
@@ -19,6 +26,9 @@ userSchema.set("toJSON", {
     if (ret._id) {
       ret.id = ret._id.toString();
       delete ret._id;
+    }
+    if (ret.password_hash) {
+      delete ret.password_hash;
     }
     return ret;
   },

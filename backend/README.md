@@ -7,8 +7,8 @@ Express + MongoDB API for the Team Task Manager.
 1. Create a MongoDB database (Atlas or local) and copy the connection string.
 2. Configure environment variables in `backend/.env.local`:
 	- `MONGODB_URI` (or `MongoDB_URI`)
-	- `CLERK_SECRET_KEY`
-	- `CLERK_PUBLISHABLE_KEY` (optional if `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is set)
+	- `JWT_SECRET`
+	- `JWT_EXPIRES_IN` (optional, defaults to 7d)
 	- `CORS_ORIGIN`
 3. Install dependencies and start the server:
 
@@ -34,5 +34,7 @@ npm run dev
 - `PATCH /api/tasks/:taskId`
 - `DELETE /api/tasks/:taskId`
 - `GET /api/dashboard`
+- `POST /api/auth/register`
+- `POST /api/auth/login`
 
-All `/api/*` routes require a Clerk bearer token.
+All `/api/*` routes except `/api/auth/*` require a JWT bearer token.
