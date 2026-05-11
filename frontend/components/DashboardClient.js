@@ -48,7 +48,6 @@ export default function DashboardClient() {
     role: "member",
   });
   const [commentInputs, setCommentInputs] = useState({});
-  const [taskComments, setTaskComments] = useState({});
 
   const apiFetch = useCallback(
     async (path, options = {}) => {
@@ -153,8 +152,6 @@ export default function DashboardClient() {
 
   const isAdmin = activeProject?.role === "admin";
   const currentUserId = currentMember?.user?.id || "";
-  const currentUserName =
-    currentMember?.user?.name || user?.fullName || user?.firstName || "You";
 
   const membersById = useMemo(() => {
     const lookup = new Map();
@@ -261,25 +258,23 @@ export default function DashboardClient() {
     }
   };
 
-  const handleAddComment = (taskId) => {
+  const handleAddComment = async (taskId) => {
     const message = (commentInputs[taskId] || "").trim();
     if (!message) return;
 
-    setTaskComments((prev) => {
-      const next = { ...prev };
-      const existing = next[taskId] || [];
-      next[taskId] = [
-        ...existing,
-        {
-          id: `${taskId}-${Date.now()}`,
-          author: currentUserName,
-          message,
-          createdAt: new Date().toISOString(),
-        },
-      ];
-      return next;
-    });
-    setCommentInputs((prev) => ({ ...prev, [taskId]: "" }));
+    try {
+      const updated = await apiFetch(`/api/tasks/${taskId}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ message }),
+      });
+
+      setTasks((prev) =>
+        prev.map((task) => (task.id === taskId ? updated : task))
+      );
+      setCommentInputs((prev) => ({ ...prev, [taskId]: "" }));
+    } catch (error) {
+      setNotice(error.message);
+    }
   };
 
   const handleInviteMember = async (event) => {
@@ -469,7 +464,7 @@ export default function DashboardClient() {
                   : null;
                 const isOverdue =
                   task.due_date && task.due_date < today && task.status !== "done";
-                const comments = taskComments[task.id] || [];
+                const comments = task.comments || [];
                 const commentValue = commentInputs[task.id] || "";
 
                 return (
@@ -521,17 +516,19 @@ export default function DashboardClient() {
                             No comments yet.
                           </p>
                         )}
-                        {comments.map((comment) => (
+                        {comments.map((comment, index) => (
                           <div
-                            key={comment.id}
+                            key={comment.id || `${task.id}-comment-${index}`}
                             className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-700"
                           >
                             <div className="flex items-center justify-between gap-2">
                               <span className="font-semibold text-zinc-800">
-                                {comment.author}
+                                {comment.author_name || "Member"}
                               </span>
                               <span className="text-[10px] uppercase tracking-[0.2em] text-zinc-400">
-                                {new Date(comment.createdAt).toLocaleDateString()}
+                                {comment.created_at
+                                  ? new Date(comment.created_at).toLocaleDateString()
+                                  : ""}
                               </span>
                             </div>
                             <p className="mt-1 text-xs text-zinc-600">

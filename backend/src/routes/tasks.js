@@ -39,6 +39,10 @@ const taskUpdateSchema = z.object({
   assignedTo: objectIdSchema.optional().nullable(),
 });
 
+const commentCreateSchema = z.object({
+  message: z.string().trim().min(1).max(500),
+});
+
 const toDateOrNull = (value) => {
   if (!value) {
     return null;
@@ -208,6 +212,52 @@ router.patch(
     }
 
     res.json({ data: updated });
+  })
+);
+
+router.post(
+  "/tasks/:taskId/comments",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { taskId } = req.params;
+    const payload = commentCreateSchema.parse(req.body);
+
+    if (!isValidObjectId(taskId)) {
+      return res.status(400).json({ error: "Invalid task id" });
+    }
+
+    const task = await Task.findById(taskId).select("id project_id");
+    if (!task) {
+      return res.status(404).json({ error: "Task not found" });
+    }
+
+    const membership = await getProjectMembership(task.project_id, req.user.id);
+    if (!membership) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const commentPayload = {
+      author_id: req.user.id,
+      author_name: req.user.name,
+      author_avatar: req.user.avatar_url || null,
+      message: payload.message,
+      created_at: new Date(),
+    };
+
+    const updated = await Task.findByIdAndUpdate(
+      taskId,
+      {
+        $push: { comments: commentPayload },
+        updated_at: new Date(),
+      },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ error: "Task not found" });
+    }
+
+    res.status(201).json({ data: updated });
   })
 );
 
