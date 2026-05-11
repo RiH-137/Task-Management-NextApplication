@@ -71,18 +71,34 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: err.message || "Server error" });
 });
 
-const port = process.env.PORT || 4000;
+const defaultPort = Number(process.env.PORT) || 4000;
+const maxPortRetries = 5;
 
-const startServer = async () => {
+const startServer = async (port, retriesLeft) => {
   try {
     await connectToDatabase();
-    app.listen(port, () => {
-      console.log(`API listening on ${port}`);
-    });
   } catch (error) {
     console.error("Failed to start server", error);
     process.exit(1);
   }
+
+  const server = app.listen(port, () => {
+    console.log(`API listening on ${port}`);
+  });
+
+  server.on("error", (error) => {
+    if (error.code === "EADDRINUSE" && retriesLeft > 0) {
+      const nextPort = port + 1;
+      console.warn(`Port ${port} in use, trying ${nextPort}...`);
+      server.close(() => {
+        startServer(nextPort, retriesLeft - 1);
+      });
+      return;
+    }
+
+    console.error("Failed to start server", error);
+    process.exit(1);
+  });
 };
 
-startServer();
+startServer(defaultPort, maxPortRetries);
