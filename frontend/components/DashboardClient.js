@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "./AuthProvider";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-const STATUS_OPTIONS = ["todo", "in_progress", "blocked", "done"];
+const STATUS_OPTIONS = ["todo", "in_progress", "done"];
 const PRIORITY_OPTIONS = ["low", "medium", "high"];
 const ROLE_OPTIONS = ["admin", "member"];
 
@@ -13,10 +13,10 @@ const emptyStats = {
   status: {
     todo: 0,
     in_progress: 0,
-    blocked: 0,
     done: 0,
   },
   overdue: 0,
+  tasks_per_user: [],
 };
 
 export default function DashboardClient() {
@@ -87,10 +87,14 @@ export default function DashboardClient() {
     [token, signOut]
   );
 
-  const loadDashboard = useCallback(async () => {
-    const data = await apiFetch("/api/dashboard");
-    setStats(data || emptyStats);
-  }, [apiFetch]);
+  const loadDashboard = useCallback(
+    async (projectId) => {
+      const query = projectId ? `?projectId=${projectId}` : "";
+      const data = await apiFetch(`/api/dashboard${query}`);
+      setStats(data || emptyStats);
+    },
+    [apiFetch]
+  );
 
   const loadProjects = useCallback(async () => {
     const data = await apiFetch("/api/projects");
@@ -174,7 +178,7 @@ export default function DashboardClient() {
 
     setLoading(true);
 
-    Promise.all([loadDashboard(), loadProjects()])
+    Promise.all([loadProjects()])
       .catch((error) => {
         if (isMounted) {
           setNotice(error.message);
@@ -189,7 +193,17 @@ export default function DashboardClient() {
     return () => {
       isMounted = false;
     };
-  }, [token, authReady, currentUser, loadDashboard, loadProjects]);
+  }, [token, authReady, currentUser, loadProjects]);
+
+  useEffect(() => {
+    if (!token || !authReady || !currentUser) {
+      return;
+    }
+
+    loadDashboard(activeProjectId).catch((error) => {
+      setNotice(error.message);
+    });
+  }, [token, authReady, currentUser, activeProjectId, loadDashboard]);
 
   useEffect(() => {
     if (!token || !authReady || !currentUser) {
@@ -230,6 +244,8 @@ export default function DashboardClient() {
     return members.filter((member) => member.user?.id === currentUserId);
   }, [currentUserId, isAdmin, members]);
 
+  const tasksPerUser = stats.tasks_per_user || [];
+
   const handleCreateProject = async (event) => {
     event.preventDefault();
     setNotice("");
@@ -261,6 +277,11 @@ export default function DashboardClient() {
   const handleCreateTask = async (event) => {
     event.preventDefault();
     setNotice("");
+
+    if (!isAdmin) {
+      setNotice("Only admins can create tasks.");
+      return;
+    }
 
     if (!activeProjectId) {
       setNotice("Select a project first.");
@@ -297,7 +318,7 @@ export default function DashboardClient() {
         assignedTo: "",
       });
       setNotice("Task added.");
-      loadDashboard();
+      loadDashboard(activeProjectId);
     } catch (error) {
       setNotice(error.message);
     }
@@ -313,7 +334,7 @@ export default function DashboardClient() {
       setTasks((prev) =>
         prev.map((task) => (task.id === taskId ? updated : task))
       );
-      loadDashboard();
+      loadDashboard(activeProjectId);
     } catch (error) {
       setNotice(error.message);
     }
@@ -371,7 +392,34 @@ export default function DashboardClient() {
     }
   };
 
+  const handleRemoveMember = async (memberId) => {
+    setNotice("");
+
+    if (!activeProjectId) {
+      setNotice("Select a project first.");
+      return;
+    }
+
+    try {
+      await apiFetch(`/api/projects/${activeProjectId}/members/${memberId}`, {
+        method: "DELETE",
+      });
+
+      setMembers((prev) => prev.filter((member) => member.id !== memberId));
+      setNotice("Member removed.");
+    } catch (error) {
+      setNotice(error.message);
+    }
+  };
+
   const today = new Date().toISOString().slice(0, 10);
+  const summaryCards = [
+    { label: isAdmin ? "Total tasks" : "My tasks", value: stats.total },
+    { label: "To do", value: stats.status?.todo || 0 },
+    { label: "In progress", value: stats.status?.in_progress || 0 },
+    { label: "Done", value: stats.status?.done || 0 },
+    { label: "Overdue", value: stats.overdue },
+  ];
 
   return (
     <section className="mx-auto max-w-6xl px-4 pb-20 pt-8 sm:px-6 lg:px-8">
@@ -386,7 +434,7 @@ export default function DashboardClient() {
               : "Welcome back."}
           </h1>
           <p className="text-sm text-zinc-600">
-            Keep an eye on what is due, what is blocked, and what is next.
+            Keep an eye on what is due, what is in progress, and what is next.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -408,12 +456,7 @@ export default function DashboardClient() {
       )}
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          { label: "My tasks", value: stats.total },
-          { label: "In progress", value: stats.status?.in_progress || 0 },
-          { label: "Blocked", value: stats.status?.blocked || 0 },
-          { label: "Overdue", value: stats.overdue },
-        ].map((item) => (
+        {summaryCards.map((item) => (
           <div
             key={item.label}
             className="rounded-2xl border border-zinc-200 bg-white/90 p-5 shadow-sm"
@@ -471,6 +514,49 @@ export default function DashboardClient() {
               ))}
             </div>
           </div>
+
+          {activeProjectId && (
+            <div className="rounded-3xl border border-zinc-200 bg-white/90 p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h3 className="font-display text-xl text-zinc-900">
+                  Tasks per user
+                </h3>
+                <span className="text-xs uppercase tracking-[0.2em] text-zinc-500">
+                  {tasksPerUser.length} assignees
+                </span>
+              </div>
+              <div className="mt-4 space-y-3">
+                {tasksPerUser.length === 0 && (
+                  <p className="text-sm text-zinc-500">
+                    No assigned tasks yet.
+                  </p>
+                )}
+                {tasksPerUser.map((entry, index) => (
+                  <div
+                    key={entry.user?.id || entry.user?.email || index}
+                    className="flex items-center justify-between rounded-2xl border border-zinc-200 px-4 py-3"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-zinc-900">
+                        {entry.user?.name || entry.user?.email || "Member"}
+                      </p>
+                      <p className="text-xs text-zinc-500">
+                        {entry.user?.email || "No email on file"}
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-zinc-300 px-3 py-1 text-xs uppercase tracking-[0.2em] text-zinc-600">
+                      {entry.total} tasks
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {!isAdmin && tasksPerUser.length > 0 && (
+                <p className="mt-4 text-xs text-zinc-500">
+                  Showing your assigned tasks only.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="rounded-3xl border border-zinc-200 bg-white/90 p-6 shadow-sm">
             <h3 className="font-display text-xl text-zinc-900">New project</h3>
@@ -642,6 +728,7 @@ export default function DashboardClient() {
                     title: event.target.value,
                   }))
                 }
+                disabled={!isAdmin}
                 className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none"
               />
               <textarea
@@ -654,6 +741,7 @@ export default function DashboardClient() {
                     description: event.target.value,
                   }))
                 }
+                disabled={!isAdmin}
                 className="w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none"
               />
               <div className="grid gap-3 sm:grid-cols-2">
@@ -666,6 +754,7 @@ export default function DashboardClient() {
                       dueDate: event.target.value,
                     }))
                   }
+                  disabled={!isAdmin}
                   className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
                 />
                 <select
@@ -676,6 +765,7 @@ export default function DashboardClient() {
                       priority: event.target.value,
                     }))
                   }
+                  disabled={!isAdmin}
                   className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
                 >
                   {PRIORITY_OPTIONS.map((priority) => (
@@ -694,6 +784,7 @@ export default function DashboardClient() {
                       status: event.target.value,
                     }))
                   }
+                  disabled={!isAdmin}
                   className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
                 >
                   {STATUS_OPTIONS.map((status) => (
@@ -710,6 +801,7 @@ export default function DashboardClient() {
                       assignedTo: event.target.value,
                     }))
                   }
+                  disabled={!isAdmin}
                   className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
                 >
                   <option value="">Unassigned</option>
@@ -722,10 +814,16 @@ export default function DashboardClient() {
               </div>
               <button
                 type="submit"
-                className="w-full rounded-2xl bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-50 shadow-sm transition hover:bg-zinc-800"
+                disabled={!isAdmin}
+                className="w-full rounded-2xl bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-50 shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
               >
                 Add task
               </button>
+              {!isAdmin && (
+                <p className="text-xs text-zinc-500">
+                  Only admins can create tasks.
+                </p>
+              )}
             </form>
           </div>
 
@@ -750,9 +848,20 @@ export default function DashboardClient() {
                       {member.user?.email || "No email on file"}
                     </p>
                   </div>
-                  <span className="rounded-full border border-zinc-300 px-3 py-1 text-xs uppercase tracking-[0.2em] text-zinc-600">
-                    {member.role}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full border border-zinc-300 px-3 py-1 text-xs uppercase tracking-[0.2em] text-zinc-600">
+                      {member.role}
+                    </span>
+                    {isAdmin && member.user?.id !== currentUserId && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveMember(member.id)}
+                        className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-red-700 transition hover:border-red-400"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
               {members.length === 0 && (

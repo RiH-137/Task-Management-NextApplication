@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const statusValues = ["todo", "in_progress", "blocked", "done"];
+const statusValues = ["todo", "in_progress", "done"];
 const priorityValues = ["low", "medium", "high"];
 
 const commentSchema = new mongoose.Schema(
@@ -58,6 +58,9 @@ taskSchema.set("toJSON", {
     if (ret._id) {
       ret.id = ret._id.toString();
       delete ret._id;
+    }
+    if (ret.status === "blocked") {
+      ret.status = "in_progress";
     }
     if (ret.due_date) {
       const date = ret.due_date instanceof Date ? ret.due_date : new Date(ret.due_date);

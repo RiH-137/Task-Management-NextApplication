@@ -7,7 +7,7 @@ const { isValidObjectId } = require("../utils/ids");
 
 const router = express.Router();
 
-const statusValues = ["todo", "in_progress", "blocked", "done"];
+const statusValues = ["todo", "in_progress", "done"];
 const priorityValues = ["low", "medium", "high"];
 const objectIdSchema = z
   .string()
@@ -65,7 +65,13 @@ router.get(
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    const tasks = await Task.find({ project_id: projectId }).sort({ created_at: -1 });
+    const taskQuery = { project_id: projectId };
+
+    if (membership.role !== "admin") {
+      taskQuery.assigned_to = req.user.id;
+    }
+
+    const tasks = await Task.find(taskQuery).sort({ created_at: -1 });
 
     res.json({ data: tasks });
   })
@@ -87,14 +93,8 @@ router.post(
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    if (
-      membership.role !== "admin" &&
-      payload.assignedTo &&
-      payload.assignedTo !== req.user.id
-    ) {
-      return res
-        .status(403)
-        .json({ error: "Members can only assign tasks to themselves" });
+    if (membership.role !== "admin") {
+      return res.status(403).json({ error: "Only admins can create tasks" });
     }
 
     if (payload.assignedTo) {
