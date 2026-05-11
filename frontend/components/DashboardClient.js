@@ -6,6 +6,13 @@ import { useAuth } from "./AuthProvider";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const STATUS_OPTIONS = ["todo", "in_progress", "done"];
+const TASK_FILTER_OPTIONS = [
+  { label: "All", value: "all" },
+  { label: "To do", value: "todo" },
+  { label: "In progress", value: "in_progress" },
+  { label: "Done", value: "done" },
+  { label: "Overdue", value: "overdue" },
+];
 const PRIORITY_OPTIONS = ["low", "medium", "high"];
 const ROLE_OPTIONS = ["admin", "member"];
 
@@ -61,6 +68,7 @@ export default function DashboardClient({ initialProjectId = "" }) {
     role: "member",
   });
   const [commentInputs, setCommentInputs] = useState({});
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const apiFetch = useCallback(
     async (path, options = {}) => {
@@ -298,6 +306,45 @@ export default function DashboardClient({ initialProjectId = "" }) {
     return members.filter((member) => member.user?.id === currentUserId);
   }, [currentUserId, isAdmin, members]);
 
+  const today = new Date().toISOString().slice(0, 10);
+
+  const isTaskOverdue = (task) =>
+    task.due_date && task.due_date < today && task.status !== "done";
+
+  const filteredTasks = useMemo(() => {
+    if (statusFilter === "all") {
+      return tasks;
+    }
+
+    return tasks.filter((task) => {
+      const overdue = isTaskOverdue(task);
+      if (statusFilter === "overdue") {
+        return overdue;
+      }
+      if (overdue) {
+        return false;
+      }
+      return task.status === statusFilter;
+    });
+  }, [tasks, statusFilter, today, isTaskOverdue]);
+
+  const overdueTasksPerUser = useMemo(() => {
+    const counts = new Map();
+
+    tasks.forEach((task) => {
+      if (!isTaskOverdue(task)) return;
+      if (!task.assigned_to) return;
+      counts.set(task.assigned_to, (counts.get(task.assigned_to) || 0) + 1);
+    });
+
+    return Array.from(counts.entries())
+      .map(([userId, total]) => ({
+        user: membersById.get(userId) || { id: userId },
+        total,
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [tasks, membersById, today, isTaskOverdue]);
+
   const tasksPerUser = stats.tasks_per_user || [];
 
   const handleCreateProject = async (event) => {
@@ -529,7 +576,6 @@ export default function DashboardClient({ initialProjectId = "" }) {
     }
   };
 
-  const today = new Date().toISOString().slice(0, 10);
   const summaryCards = [
     { label: isAdmin ? "Total tasks" : "My tasks", value: stats.total },
     { label: "To do", value: stats.status?.todo || 0 },
@@ -675,6 +721,49 @@ export default function DashboardClient({ initialProjectId = "" }) {
             </div>
           )}
 
+          {activeProjectId && (
+            <div className="rounded-3xl border border-zinc-200 bg-white/90 p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h3 className="font-display text-xl text-zinc-900">
+                  Overdue tasks per user
+                </h3>
+                <span className="text-xs uppercase tracking-[0.2em] text-zinc-500">
+                  {overdueTasksPerUser.length} assignees
+                </span>
+              </div>
+              <div className="mt-4 space-y-3">
+                {overdueTasksPerUser.length === 0 && (
+                  <p className="text-sm text-zinc-500">
+                    No overdue tasks yet.
+                  </p>
+                )}
+                {overdueTasksPerUser.map((entry, index) => (
+                  <div
+                    key={entry.user?.id || entry.user?.email || index}
+                    className="flex items-center justify-between rounded-2xl border border-zinc-200 px-4 py-3"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-zinc-900">
+                        {entry.user?.name || entry.user?.email || "Member"}
+                      </p>
+                      <p className="text-xs text-zinc-500">
+                        {entry.user?.email || "No email on file"}
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-zinc-300 px-3 py-1 text-xs uppercase tracking-[0.2em] text-zinc-600">
+                      {entry.total} overdue
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {!isAdmin && overdueTasksPerUser.length > 0 && (
+                <p className="mt-4 text-xs text-zinc-500">
+                  Showing your assigned tasks only.
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="rounded-3xl border border-zinc-200 bg-white/90 p-6 shadow-sm">
             <h3 className="font-display text-xl text-zinc-900">New project</h3>
             <form className="mt-4 space-y-3" onSubmit={handleCreateProject}>
@@ -717,19 +806,42 @@ export default function DashboardClient({ initialProjectId = "" }) {
             <div className="flex items-center justify-between">
               <h2 className="font-display text-2xl text-zinc-900">Tasks</h2>
               <span className="text-xs uppercase tracking-[0.2em] text-zinc-500">
-                {tasks.length} items
+                {filteredTasks.length} of {tasks.length} items
               </span>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {TASK_FILTER_OPTIONS.map((option) => {
+                const isActive = statusFilter === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setStatusFilter(option.value)}
+                    className={`rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] transition ${
+                      isActive
+                        ? "border-zinc-900 bg-zinc-900 text-zinc-50"
+                        : "border-zinc-300 bg-white text-zinc-600 hover:border-zinc-500"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
             </div>
             <div className="mt-6 space-y-3">
               {tasks.length === 0 && (
                 <p className="text-sm text-zinc-500">No tasks yet.</p>
               )}
-              {tasks.map((task) => {
+              {tasks.length > 0 && filteredTasks.length === 0 && (
+                <p className="text-sm text-zinc-500">
+                  No tasks match this filter.
+                </p>
+              )}
+              {filteredTasks.map((task) => {
                 const assignee = task.assigned_to
                   ? membersById.get(task.assigned_to)
                   : null;
-                const isOverdue =
-                  task.due_date && task.due_date < today && task.status !== "done";
+                const isOverdue = isTaskOverdue(task);
                 const comments = task.comments || [];
                 const commentValue = commentInputs[task.id] || "";
 
@@ -779,7 +891,7 @@ export default function DashboardClient({ initialProjectId = "" }) {
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-zinc-500">
                       <span>
-                        Due: {task.due_date ? task.due_date : "No date"}
+                        End date: {task.due_date ? task.due_date : "No date"}
                       </span>
                       {isOverdue && (
                         <span className="rounded-full border border-zinc-400 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-zinc-700">
@@ -817,17 +929,22 @@ export default function DashboardClient({ initialProjectId = "" }) {
                           className="w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none"
                         />
                         <div className="grid gap-3 sm:grid-cols-2">
-                          <input
-                            type="date"
-                            value={editTaskForm.dueDate}
-                            onChange={(event) =>
-                              setEditTaskForm((prev) => ({
-                                ...prev,
-                                dueDate: event.target.value,
-                              }))
-                            }
-                            className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
-                          />
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                              End date
+                            </p>
+                            <input
+                              type="date"
+                              value={editTaskForm.dueDate}
+                              onChange={(event) =>
+                                setEditTaskForm((prev) => ({
+                                  ...prev,
+                                  dueDate: event.target.value,
+                                }))
+                              }
+                              className="mt-2 w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
+                            />
+                          </div>
                           <select
                             value={editTaskForm.priority}
                             onChange={(event) =>
@@ -987,18 +1104,23 @@ export default function DashboardClient({ initialProjectId = "" }) {
                 className="w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none"
               />
               <div className="grid gap-3 sm:grid-cols-2">
-                <input
-                  type="date"
-                  value={taskForm.dueDate}
-                  onChange={(event) =>
-                    setTaskForm((prev) => ({
-                      ...prev,
-                      dueDate: event.target.value,
-                    }))
-                  }
-                  disabled={!isAdmin}
-                  className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
-                />
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                    End date
+                  </p>
+                  <input
+                    type="date"
+                    value={taskForm.dueDate}
+                    onChange={(event) =>
+                      setTaskForm((prev) => ({
+                        ...prev,
+                        dueDate: event.target.value,
+                      }))
+                    }
+                    disabled={!isAdmin}
+                    className="mt-2 w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
+                  />
+                </div>
                 <select
                   value={taskForm.priority}
                   onChange={(event) =>
