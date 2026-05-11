@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "./AuthProvider";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -19,8 +20,10 @@ const emptyStats = {
   tasks_per_user: [],
 };
 
-export default function DashboardClient() {
+export default function DashboardClient({ initialProjectId = "" }) {
   const { token, signOut } = useAuth();
+  const router = useRouter();
+  const routeProjectId = initialProjectId || "";
 
   const [stats, setStats] = useState(emptyStats);
   const [projects, setProjects] = useState([]);
@@ -37,6 +40,15 @@ export default function DashboardClient() {
     description: "",
   });
   const [taskForm, setTaskForm] = useState({
+    title: "",
+    description: "",
+    dueDate: "",
+    status: "todo",
+    priority: "medium",
+    assignedTo: "",
+  });
+  const [editTaskId, setEditTaskId] = useState("");
+  const [editTaskForm, setEditTaskForm] = useState({
     title: "",
     description: "",
     dueDate: "",
@@ -99,8 +111,28 @@ export default function DashboardClient() {
   const loadProjects = useCallback(async () => {
     const data = await apiFetch("/api/projects");
     setProjects(data || []);
-    setActiveProjectId((current) => current || data?.[0]?.id || "");
-  }, [apiFetch]);
+
+    const hasRouteMatch = routeProjectId
+      ? data?.some((project) => project.id === routeProjectId)
+      : false;
+
+    setActiveProjectId((current) => {
+      if (routeProjectId && hasRouteMatch) {
+        return routeProjectId;
+      }
+
+      return current || data?.[0]?.id || "";
+    });
+
+    if (routeProjectId && !hasRouteMatch) {
+      const fallbackId = data?.[0]?.id || "";
+      if (fallbackId) {
+        router.replace(`/projects/${fallbackId}`);
+      } else {
+        router.replace("/projects");
+      }
+    }
+  }, [apiFetch, routeProjectId, router]);
 
   const loadProjectDetails = useCallback(
     async (projectId) => {
@@ -194,6 +226,28 @@ export default function DashboardClient() {
       isMounted = false;
     };
   }, [token, authReady, currentUser, loadProjects]);
+
+  useEffect(() => {
+    if (!routeProjectId) {
+      return;
+    }
+
+    setActiveProjectId((current) =>
+      current === routeProjectId ? current : routeProjectId
+    );
+  }, [routeProjectId]);
+
+  useEffect(() => {
+    if (!activeProjectId) {
+      return;
+    }
+
+    if (routeProjectId === activeProjectId) {
+      return;
+    }
+
+    router.push(`/projects/${activeProjectId}`);
+  }, [activeProjectId, routeProjectId, router]);
 
   useEffect(() => {
     if (!token || !authReady || !currentUser) {
@@ -334,6 +388,69 @@ export default function DashboardClient() {
       setTasks((prev) =>
         prev.map((task) => (task.id === taskId ? updated : task))
       );
+      loadDashboard(activeProjectId);
+    } catch (error) {
+      setNotice(error.message);
+    }
+  };
+
+  const startEditTask = (task) => {
+    setEditTaskId(task.id);
+    setEditTaskForm({
+      title: task.title || "",
+      description: task.description || "",
+      dueDate: task.due_date || "",
+      status: task.status || "todo",
+      priority: task.priority || "medium",
+      assignedTo: task.assigned_to || "",
+    });
+  };
+
+  const cancelEditTask = () => {
+    setEditTaskId("");
+    setEditTaskForm({
+      title: "",
+      description: "",
+      dueDate: "",
+      status: "todo",
+      priority: "medium",
+      assignedTo: "",
+    });
+  };
+
+  const handleUpdateTask = async (event) => {
+    event.preventDefault();
+    setNotice("");
+
+    if (!editTaskId) {
+      return;
+    }
+
+    if (!editTaskForm.title.trim()) {
+      setNotice("Task title is required.");
+      return;
+    }
+
+    try {
+      const payload = {
+        title: editTaskForm.title.trim(),
+        description: editTaskForm.description.trim() || null,
+        dueDate: editTaskForm.dueDate || null,
+        status: editTaskForm.status,
+        priority: editTaskForm.priority,
+        assignedTo: editTaskForm.assignedTo || null,
+      };
+
+      const updated = await apiFetch(`/api/tasks/${editTaskId}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+
+      setTasks((prev) =>
+        prev.map((task) => (task.id === editTaskId ? updated : task))
+      );
+      setNotice("Task updated.");
+      cancelEditTask();
       loadDashboard(activeProjectId);
     } catch (error) {
       setNotice(error.message);
@@ -631,19 +748,34 @@ export default function DashboardClient() {
                           {task.priority}
                         </p>
                       </div>
-                      <select
-                        value={task.status}
-                        onChange={(event) =>
-                          handleStatusChange(task.id, event.target.value)
-                        }
-                        className="rounded-full border border-zinc-300 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-zinc-600"
-                      >
-                        {STATUS_OPTIONS.map((status) => (
-                          <option key={status} value={status}>
-                            {status.replace("_", " ")}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={task.status}
+                          onChange={(event) =>
+                            handleStatusChange(task.id, event.target.value)
+                          }
+                          className="rounded-full border border-zinc-300 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-zinc-600"
+                        >
+                          {STATUS_OPTIONS.map((status) => (
+                            <option key={status} value={status}>
+                              {status.replace("_", " ")}
+                            </option>
+                          ))}
+                        </select>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              editTaskId === task.id
+                                ? cancelEditTask()
+                                : startEditTask(task)
+                            }
+                            className="rounded-full border border-zinc-300 bg-white px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-zinc-600 transition hover:border-zinc-500"
+                          >
+                            {editTaskId === task.id ? "Cancel" : "Edit"}
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-zinc-500">
                       <span>
@@ -655,6 +787,116 @@ export default function DashboardClient() {
                         </span>
                       )}
                     </div>
+                    {isAdmin && editTaskId === task.id && (
+                      <form
+                        className="mt-4 space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-4"
+                        onSubmit={handleUpdateTask}
+                      >
+                        <input
+                          type="text"
+                          placeholder="Task title"
+                          value={editTaskForm.title}
+                          onChange={(event) =>
+                            setEditTaskForm((prev) => ({
+                              ...prev,
+                              title: event.target.value,
+                            }))
+                          }
+                          className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none"
+                        />
+                        <textarea
+                          rows={3}
+                          placeholder="Task details"
+                          value={editTaskForm.description}
+                          onChange={(event) =>
+                            setEditTaskForm((prev) => ({
+                              ...prev,
+                              description: event.target.value,
+                            }))
+                          }
+                          className="w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none"
+                        />
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <input
+                            type="date"
+                            value={editTaskForm.dueDate}
+                            onChange={(event) =>
+                              setEditTaskForm((prev) => ({
+                                ...prev,
+                                dueDate: event.target.value,
+                              }))
+                            }
+                            className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
+                          />
+                          <select
+                            value={editTaskForm.priority}
+                            onChange={(event) =>
+                              setEditTaskForm((prev) => ({
+                                ...prev,
+                                priority: event.target.value,
+                              }))
+                            }
+                            className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
+                          >
+                            {PRIORITY_OPTIONS.map((priority) => (
+                              <option key={priority} value={priority}>
+                                {priority}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <select
+                            value={editTaskForm.status}
+                            onChange={(event) =>
+                              setEditTaskForm((prev) => ({
+                                ...prev,
+                                status: event.target.value,
+                              }))
+                            }
+                            className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
+                          >
+                            {STATUS_OPTIONS.map((status) => (
+                              <option key={status} value={status}>
+                                {status.replace("_", " ")}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={editTaskForm.assignedTo}
+                            onChange={(event) =>
+                              setEditTaskForm((prev) => ({
+                                ...prev,
+                                assignedTo: event.target.value,
+                              }))
+                            }
+                            className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
+                          >
+                            <option value="">Unassigned</option>
+                            {members.map((member) => (
+                              <option key={member.id} value={member.user?.id || ""}>
+                                {member.user?.name || member.user?.email || "Member"}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="submit"
+                            className="rounded-2xl bg-zinc-900 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-50 shadow-sm transition hover:bg-zinc-800"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEditTask}
+                            className="rounded-2xl border border-zinc-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-600 transition hover:border-zinc-500"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    )}
                     <div className="mt-4 border-t border-zinc-100 pt-4">
                       <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">
                         Comments

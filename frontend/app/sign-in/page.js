@@ -49,7 +49,7 @@ export default function SignInPage() {
       }
 
       setToken(token);
-      router.push("/");
+      router.push("/projects");
       router.refresh();
     } catch (error) {
       setNotice(error.message || "Sign in failed.");

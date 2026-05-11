@@ -67,7 +67,7 @@ export default function SignUpPage() {
       }
 
       setToken(token);
-      router.push("/");
+      router.push("/projects");
       router.refresh();
     } catch (error) {
       setNotice(error.message || "Sign up failed.");
@@ -107,7 +107,7 @@ export default function SignUpPage() {
                 setFormState((prev) => ({ ...prev, name: event.target.value }))
               }
               className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none"
-              placeholder="Alex Morgan"
+              placeholder="Rishi Ranjan"
             />
           </div>
           <div className="space-y-2">
