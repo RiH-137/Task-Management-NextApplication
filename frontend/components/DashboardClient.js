@@ -805,9 +805,24 @@ export default function DashboardClient({ initialProjectId = "" }) {
           <div className="rounded-3xl border border-zinc-200 bg-white/90 p-6 shadow-sm">
             <div className="flex items-center justify-between">
               <h2 className="font-display text-2xl text-zinc-900">Tasks</h2>
-              <span className="text-xs uppercase tracking-[0.2em] text-zinc-500">
-                {filteredTasks.length} of {tasks.length} items
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs uppercase tracking-[0.2em] text-zinc-500">
+                  {filteredTasks.length} of {tasks.length} items
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    document
+                      .getElementById("new-task")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  }
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-zinc-300 bg-white text-lg font-semibold text-zinc-900 transition hover:border-zinc-500"
+                  aria-label="Create new task"
+                  title="Create new task"
+                >
+                  +
+                </button>
+              </div>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               {TASK_FILTER_OPTIONS.map((option) => {
@@ -1074,7 +1089,10 @@ export default function DashboardClient({ initialProjectId = "" }) {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-zinc-200 bg-white/90 p-6 shadow-sm">
+          <div
+            id="new-task"
+            className="rounded-3xl border border-zinc-200 bg-white/90 p-6 shadow-sm"
+          >
             <h3 className="font-display text-xl text-zinc-900">New task</h3>
             <form className="mt-4 space-y-3" onSubmit={handleCreateTask}>
               <input
